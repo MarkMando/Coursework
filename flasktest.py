@@ -5,6 +5,9 @@ Created on Thu Feb 13 20:39:15 2025
 @author: Mark
 """
 
+import os
+import uuid
+from datetime import datetime
 from flask import Flask, render_template, redirect, url_for, flash, session, request
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_sqlalchemy import SQLAlchemy
@@ -12,6 +15,12 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField
 from wtforms.validators import InputRequired, Length, Email, ValidationError
 from flask_bcrypt import Bcrypt
+from flask_wtf.file import FileField, FileAllowed
+from werkzeug.utils import secure_filename
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 app = Flask(__name__)
 
@@ -20,9 +29,11 @@ DB_PASSWORD = 'Arsenal%401957'  # Corrected password (URL-encoded '@' as '%40')
 DB_HOST = 'localhost'
 DB_PORT = '3306'
 DB_NAME = 'document_storage'
+UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads/')
 
 app.config['SECRET_KEY'] = 'thisisasecretkey'
 app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 
@@ -43,6 +54,18 @@ class User(db.Model, UserMixin):
 
     def get_id(self):
         return str(self.user_id)  # Override to use user_id instead of id
+    
+class Document(db.Model):
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    ##guid = db.Column(db.String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    title = db.Column(db.String(255), nullable=False)
+    author = db.Column(db.String(255), nullable=False)
+    upload_date = db.Column(db.DateTime, default=datetime.utcnow)
+    file_path = db.Column(db.String(255), nullable=False)
+    file_type = db.Column(db.String(50), nullable=False)
+    size_kb = db.Column(db.Integer, nullable=False)
+    uploaded_by = db.Column(db.Integer, db.ForeignKey('user.user_id'), nullable=False)
+    user = db.relationship('User', backref=db.backref('documents', lazy=True))
 
 class RegisterForm(FlaskForm):
     username = StringField(validators=[InputRequired(), Length(min=4, max=20)], render_kw={"placeholder": "Username"})
@@ -60,22 +83,31 @@ class LoginForm(FlaskForm):
     password = PasswordField(validators=[InputRequired(), Length(min=8, max=20)], render_kw={"placeholder": "Password"})
     submit = SubmitField('Login')
 
+class UploadForm(FlaskForm):
+    title = StringField('Document Title', validators=[InputRequired(), Length(max=255)])
+    author = StringField('Author', validators=[InputRequired(), Length(max=255)])
+    file = FileField('Upload Document', validators=[InputRequired(), FileAllowed(['pdf', 'docx', 'txt'], 'Documents only!')])
+    submit = SubmitField('Upload')
+
 @app.route('/')
 def home():
     return render_template('home.html')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    
     form = LoginForm()
     if form.validate_on_submit():
         user = User.query.filter_by(username=form.username.data).first()
         if user and bcrypt.check_password_hash(user.password, form.password.data):
             login_user(user)
-            session['username'] = user.username  # Store username in session
-            flash("Login successful!", "success")
-            next_page = request.args.get('next')
-            return redirect(next_page) if next_page else redirect(url_for('dashboard'))
-        flash("Invalid username or password.", "danger")
+            flash('Login successful!', 'success')
+            return redirect(url_for('upload'))
+        else:
+            flash('Invalid credentials.', 'danger')
+    
     return render_template('login.html', form=form)
 
 @app.route('/dashboard')
@@ -87,12 +119,15 @@ def dashboard():
 @login_required
 def logout():
     logout_user()
-    session.clear()  # Clears session to prevent reuse
+    session.pop('_flashes', None)
     flash("Logged out successfully.", "info")
     return redirect(url_for('login'))
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    
     form = RegisterForm()
     if form.validate_on_submit():
         hashed_password = bcrypt.generate_password_hash(form.password.data).decode('utf-8')
@@ -101,7 +136,30 @@ def register():
         db.session.commit()
         flash("Registration successful! Please log in.", "success")
         return redirect(url_for('login'))
+    
     return render_template('register.html', form=form)
+
+@app.route('/upload', methods=['GET', 'POST'])
+@login_required
+def upload():
+    form = UploadForm()
+    if form.validate_on_submit():
+        file = form.file.data
+        filename = secure_filename(file.filename)
+        upload_folder = app.config.get('UPLOAD_FOLDER', 'uploads/')
+        if not os.path.exists(upload_folder):
+            os.makedirs(upload_folder)
+        filepath = os.path.join(upload_folder, filename)
+        file.save(filepath)
+
+        file_ext = os.path.splitext(filename)[1][1:]  # Extract file extension without the dot
+        file_size_kb = os.path.getsize(filepath) // 1024  # Calculate file size in kilobytes
+        new_document = Document(title=form.title.data, author=form.author.data, file_path=filepath, file_type=file_ext, size_kb=file_size_kb, uploaded_by=current_user.user_id)
+        db.session.add(new_document)
+        db.session.commit()
+        flash("File uploaded successfully!", "success")
+        return redirect(url_for('dashboard'))
+    return render_template('upload.html', form=form)
 
 if __name__ == "__main__":
     app.run(debug=True)
