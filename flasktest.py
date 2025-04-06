@@ -57,7 +57,6 @@ class User(db.Model, UserMixin):
     
 class Document(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    ##guid = db.Column(db.String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
     title = db.Column(db.String(255), nullable=False)
     author = db.Column(db.String(255), nullable=False)
     upload_date = db.Column(db.DateTime, default=datetime.utcnow)
@@ -104,7 +103,7 @@ def login():
         if user and bcrypt.check_password_hash(user.password, form.password.data):
             login_user(user)
             flash('Login successful!', 'success')
-            return redirect(url_for('upload'))
+            return redirect(url_for('dashboard'))
         else:
             flash('Invalid credentials.', 'danger')
     
@@ -119,7 +118,7 @@ def dashboard():
 @login_required
 def logout():
     logout_user()
-    session.pop('_flashes', None)
+    session.clear()
     flash("Logged out successfully.", "info")
     return redirect(url_for('login'))
 
