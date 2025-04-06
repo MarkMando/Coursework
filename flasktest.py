@@ -95,7 +95,7 @@ def home():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('upload'))
     
     form = LoginForm()
     if form.validate_on_submit():
@@ -103,7 +103,7 @@ def login():
         if user and bcrypt.check_password_hash(user.password, form.password.data):
             login_user(user)
             flash('Login successful!', 'success')
-            return redirect(url_for('dashboard'))
+            return redirect(url_for('upload'))
         else:
             flash('Invalid credentials.', 'danger')
     
@@ -145,20 +145,35 @@ def upload():
     if form.validate_on_submit():
         file = form.file.data
         filename = secure_filename(file.filename)
-        upload_folder = app.config.get('UPLOAD_FOLDER', 'uploads/')
+
+        # Ensure uploads folder is next to templates directory
+        template_dir = os.path.join(app.root_path, 'templates')
+        upload_folder = os.path.join(os.path.dirname(template_dir), 'uploads')
+
         if not os.path.exists(upload_folder):
             os.makedirs(upload_folder)
+
         filepath = os.path.join(upload_folder, filename)
         file.save(filepath)
 
-        file_ext = os.path.splitext(filename)[1][1:]  # Extract file extension without the dot
-        file_size_kb = os.path.getsize(filepath) // 1024  # Calculate file size in kilobytes
-        new_document = Document(title=form.title.data, author=form.author.data, file_path=filepath, file_type=file_ext, size_kb=file_size_kb, uploaded_by=current_user.user_id)
+        file_ext = os.path.splitext(filename)[1][1:]  # Remove the dot
+        file_size_kb = os.path.getsize(filepath) // 1024  # Convert bytes to KB
+
+        new_document = Document(
+            title=form.title.data,
+            author=form.author.data,
+            file_path=filepath,
+            file_type=file_ext,
+            size_kb=file_size_kb,
+            uploaded_by=current_user.user_id  # Updated reference here
+        )
+
         db.session.add(new_document)
         db.session.commit()
         flash("File uploaded successfully!", "success")
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('upload'))
     return render_template('upload.html', form=form)
+
 
 if __name__ == "__main__":
     app.run(debug=True)
