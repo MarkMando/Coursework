@@ -18,6 +18,8 @@ from flask_bcrypt import Bcrypt
 from flask_wtf.file import FileField, FileAllowed
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
+from docx import Document as DocxDocument
+import PyPDF2
 
 # Load environment variables
 load_dotenv()
@@ -43,7 +45,7 @@ login_manager.login_view = 'login'
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))
 
 class User(db.Model, UserMixin): 
     user_id = db.Column(db.Integer, primary_key=True, autoincrement=True) 
@@ -56,7 +58,7 @@ class User(db.Model, UserMixin):
         return str(self.user_id)  # Override to use user_id instead of id
     
 class Document(db.Model):
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    doc_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     title = db.Column(db.String(255), nullable=False)
     author = db.Column(db.String(255), nullable=False)
     upload_date = db.Column(db.DateTime, default=datetime.utcnow)
@@ -64,7 +66,20 @@ class Document(db.Model):
     file_type = db.Column(db.String(50), nullable=False)
     size_kb = db.Column(db.Integer, nullable=False)
     uploaded_by = db.Column(db.Integer, db.ForeignKey('user.user_id'), nullable=False)
-    user = db.relationship('User', backref=db.backref('documents', lazy=True))
+    user = db.relationship('User', backref=db.backref('document', lazy=True))
+    content = db.relationship('Content', backref='document', uselist=False, lazy=True)
+
+class Content(db.Model):
+    content_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    doc_id = db.Column(db.Integer, db.ForeignKey('document.doc_id'), nullable=False)
+    text_content = db.Column(db.Text, nullable=True)
+
+class SearchLogs(db.Model):
+    search_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    query = db.Column(db.String(255), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.user_id'), nullable=False)
+    search_date = db.Column(db.DateTime, default=datetime.utcnow)
+
 
 class RegisterForm(FlaskForm):
     username = StringField(validators=[InputRequired(), Length(min=4, max=20)], render_kw={"placeholder": "Username"})
@@ -87,6 +102,10 @@ class UploadForm(FlaskForm):
     author = StringField('Author', validators=[InputRequired(), Length(max=255)])
     file = FileField('Upload Document', validators=[InputRequired(), FileAllowed(['pdf', 'docx', 'txt'], 'Documents only!')])
     submit = SubmitField('Upload')
+
+class SearchForm(FlaskForm):
+    query = StringField('Search', validators=[InputRequired(), Length(min=1, max=255)], render_kw={"placeholder": "Search..."})
+    submit = SubmitField('Search')
 
 @app.route('/')
 def home():
@@ -138,6 +157,62 @@ def register():
     
     return render_template('register.html', form=form)
 
+
+@app.route('/search', methods=['GET', 'POST'])
+@login_required
+def search():
+    form = SearchForm()
+    results = []
+
+    if form.validate_on_submit():
+        query = form.query.data.strip()
+        print(f"🔍 Received search query: {query}")
+
+        if not query:
+            flash("Please enter a search term.", "warning")
+            return render_template('search.html', form=form, results=[])
+
+        # Log search
+        log = SearchLogs(query=query, user_id=current_user.user_id)
+        db.session.add(log)
+        db.session.commit()
+
+        # Perform search
+        results = (
+            db.session.query(Document)
+            .join(Content)
+            .filter(Content.text_content.ilike(f"%{query}%"))
+            .order_by(Document.upload_date.desc())
+            .all()
+        )
+
+        print(f"✅ Found {len(results)} results for '{query}'")
+
+        if not results:
+            flash("No results found.", "info")
+
+    return render_template('search.html', form=form, results=results)
+
+
+def read_file_contents(file_path, file_ext):
+    if file_ext == 'txt':
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            print(f"Read TXT content: {content[:100]}...")  # Debugging output (first 100 chars)
+            return content
+    elif file_ext == 'pdf':
+        with open(file_path, 'rb') as f:
+            reader = PyPDF2.PdfReader(f)
+            content = "\n".join([page.extract_text() for page in reader.pages if page.extract_text()])
+            print(f"Read PDF content: {content[:100]}...")  # Debugging output (first 100 chars)
+            return content
+    elif file_ext == 'docx':
+        doc = DocxDocument(file_path)
+        content = "\n".join([para.text for para in doc.paragraphs])
+        print(f"Read DOCX content: {content[:100]}...")  # Debugging output (first 100 chars)
+        return content
+    return ""
+
 @app.route('/upload', methods=['GET', 'POST'])
 @login_required
 def upload():
@@ -170,10 +245,16 @@ def upload():
 
         db.session.add(new_document)
         db.session.commit()
+
+        # Now store content separately
+        content_text = read_file_contents(filepath, file_ext)
+        content_entry = Content(doc_id=new_document.doc_id, text_content=content_text)
+        db.session.add(content_entry)
+        db.session.commit()
+
         flash("File uploaded successfully!", "success")
         return redirect(url_for('upload'))
     return render_template('upload.html', form=form)
-
 
 if __name__ == "__main__":
     app.run(debug=True)
