@@ -1,48 +1,146 @@
-<!-- templates/search.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Search Documents</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search Documents - DocStore System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding-top: 56px; /* Adjust based on navbar height */
+        }
+        .sidebar {
+            position: fixed;
+            top: 56px; /* Match body padding-top */
+            bottom: 0;
+            left: 0;
+            z-index: 100;
+            padding: 48px 0 0; /* Add padding below navbar */
+            box-shadow: inset -1px 0 0 rgba(0, 0, 0, .1);
+            width: 220px; /* Adjust sidebar width as needed */
+        }
+        .main-content {
+            margin-left: 220px; /* Same as sidebar width */
+            padding: 20px;
+        }
+        /* Style for active sidebar link */
+        .sidebar .nav-link.active {
+            font-weight: bold;
+            color: #0d6efd; /* Bootstrap primary blue */
+        }
+    </style>
 </head>
-<body class="bg-light">
-    <div class="container mt-5">
-        <h2 class="mb-4 text-center">Search Documents</h2>
+<body>
 
-        <form method="POST" action="{{ url_for('search') }}" class="row g-3">
-            {{ form.hidden_tag() }}  <!-- Required for CSRF protection -->
-            <div class="col-md-10">
-                {{ form.query(class="form-control", placeholder="Enter keyword...") }}
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('home') }}">DocStore System</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    {% if current_user.is_authenticated %}
+                        <li class="nav-item">
+                            <span class="navbar-text me-3">
+                                Welcome, {{ current_user.username }}!
+                            </span>
+                        </li>
+                        <li class="nav-item">
+                            <a class="btn btn-outline-light" href="{{ url_for('logout') }}">Logout</a>
+                        </li>
+                    {% else %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('login') }}">Login</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('register') }}">Register</a>
+                        </li>
+                    {% endif %}
+                </ul>
             </div>
-            <div class="col-md-2">
-                {{ form.submit(class="btn btn-primary w-100") }}
-            </div>
-        </form>
-
-        {% if results is not none %}
-            <div class="mt-5">
-                <h4>Results for: "<strong>{{ form.query.data }}</strong>"</h4>
-                {% if results %}
-                    <ul class="list-group mt-3">
-                       {% for result in results %}
-        			<li class="list-group-item">
-            				<h5>{{ result.title }}</h5>
-            				<p><strong>Author:</strong> {{ result.author }}</p>
-            				<p><strong>Uploaded:</strong> {{ result.upload_date.strftime('%Y-%m-%d') }}</p>
-            				<p class="text-muted"><strong>Preview:</strong> {{ result.content.text_content[:200] }}...</p>
-        			</li>
-    			{% endfor %}
-                    </ul>
-                {% else %}
-                    <p class="text-muted mt-3">No documents found matching your search.</p>
-                {% endif %}
-            </div>
-        {% endif %}
-
-        <div class="mt-4">
-            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
         </div>
+    </nav>
+
+    <div class="sidebar bg-light">
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url_for('dashboard') }}">
+                    Dashboard Home
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url_for('upload') }}">
+                    Upload Document
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link active" aria-current="page" href="{{ url_for('search') }}">
+                    Search Documents
+                </a>
+            </li>
+             {% if current_user.role == 'admin' %}
+            <li class="nav-item">
+                 <a class="nav-link" href="#">Admin Panel</a> </li>
+            {% endif %}
+        </ul>
     </div>
+
+    <main class="main-content">
+        <div class="container-fluid">
+            <h1>Search Documents</h1>
+            <hr>
+
+             {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <form method="POST" action="{{ url_for('search') }}" class="row g-3 mb-4">
+                {{ form.hidden_tag() }} <div class="col-md-10">
+                    {{ form.query.label(class="visually-hidden") }} {{ form.query(class="form-control", placeholder="Enter keyword to search document content...") }}
+                </div>
+                <div class="col-md-2">
+                    {{ form.submit(class="btn btn-primary w-100") }}
+                </div>
+            </form>
+
+            {% if results is not none %}
+                <div class="mt-4">
+                    <h4>Results {% if form.query.data %}for: "<strong>{{ form.query.data }}</strong>"{% endif %}</h4>
+                    {% if results %}
+                        <ul class="list-group mt-3">
+                           {% for result in results %}
+                                <li class="list-group-item">
+                                    <h5>{{ result.title }}</h5>
+                                    <p class="mb-1"><strong>Author:</strong> {{ result.author }}</p>
+                                    <p class="mb-1"><small><strong>Uploaded:</strong> {{ result.upload_date.strftime('%Y-%m-%d %H:%M') }}</small></p>
+                                    {% if result.content and result.content.text_content %}
+                                        <p class="text-muted small mt-2"><em>Preview:</em> {{ result.content.text_content[:250] | safe }}...</p>
+                                    {% else %}
+                                         <p class="text-muted small mt-2"><em>(No preview available)</em></p>
+                                    {% endif %}
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                         {% if request.method == 'POST' %}
+                            <p class="text-muted mt-3">No documents found matching your search criteria.</p>
+                         {% endif %}
+                    {% endif %}
+                </div>
+            {% endif %}
+
+            </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
 </body>
 </html>

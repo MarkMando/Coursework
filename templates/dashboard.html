@@ -1,16 +1,129 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard</title>
+    <title>User Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding-top: 56px; /* Adjust based on navbar height */
+        }
+        .sidebar {
+            position: fixed;
+            top: 56px; /* Match body padding-top */
+            bottom: 0;
+            left: 0;
+            z-index: 100;
+            padding: 48px 0 0; /* Add padding below navbar */
+            box-shadow: inset -1px 0 0 rgba(0, 0, 0, .1);
+            width: 220px; /* Adjust sidebar width as needed */
+        }
+        .main-content {
+            margin-left: 220px; /* Same as sidebar width */
+            padding: 20px;
+        }
+    </style>
 </head>
-
 <body>
-    <h1>Hello you are logged in.</h1>
-    <a href="{{url_for('logout')}}">Press here to logout</a>
-</body>
 
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('home') }}">Subsystem 2</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    {% if current_user.is_authenticated %}
+                        <li class="nav-item">
+                            <span class="navbar-text me-3">
+                                Welcome, {{ current_user.username }}!
+                            </span>
+                        </li>
+                        <li class="nav-item">
+                            <a class="btn btn-outline-light" href="{{ url_for('logout') }}">Logout</a>
+                        </li>
+                    {% else %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('login') }}">Login</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('register') }}">Register</a>
+                        </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="sidebar bg-light">
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <a class="nav-link active" aria-current="page" href="{{ url_for('dashboard') }}">
+                    Dashboard Home
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url_for('upload') }}">
+                    Upload Document
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url_for('search') }}">
+                    Search Documents
+                </a>
+            </li>
+             {% if current_user.role == 'admin' %}
+            <li class="nav-item">
+                 <a class="nav-link" href="#">Admin Panel</a> </li>
+            {% endif %}
+        </ul>
+    </div>
+
+    <main class="main-content">
+        <div class="container-fluid">
+            <h1>Dashboard</h1>
+            <hr>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <p>Welcome to your document management dashboard.</p>
+            <p>Use the links on the left to navigate the system.</p>
+
+            <div class="row mt-4">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">Upload New Document</h5>
+                            <p class="card-text">Add new PDF, DOCX, or TXT files to the system.</p>
+                            <a href="{{ url_for('upload') }}" class="btn btn-primary">Go to Upload</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">Search Documents</h5>
+                            <p class="card-text">Find documents based on their content.</p>
+                            <a href="{{ url_for('search') }}" class="btn btn-success">Go to Search</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
 </html>

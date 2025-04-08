@@ -109,12 +109,15 @@ class SearchForm(FlaskForm):
 
 @app.route('/')
 def home():
-    return render_template('home.html')
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    else:
+        return redirect(url_for('login'))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for('upload'))
+        return redirect(url_for('dashboard'))
     
     form = LoginForm()
     if form.validate_on_submit():
@@ -122,7 +125,7 @@ def login():
         if user and bcrypt.check_password_hash(user.password, form.password.data):
             login_user(user)
             flash('Login successful!', 'success')
-            return redirect(url_for('upload'))
+            return redirect(url_for('dashboard'))
         else:
             flash('Invalid credentials.', 'danger')
     
@@ -131,7 +134,8 @@ def login():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    return f"Welcome, {current_user.username}! <a href='{url_for('logout')}'>Logout</a>"
+    #return f"Welcome, {current_user.username}! <a href='{url_for('logout')}'>Logout</a>"
+    return render_template('dashboard.html')
 
 @app.route('/logout')
 @login_required
