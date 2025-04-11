@@ -8,8 +8,8 @@ app = Flask(__name__)
 
 # Replace with actual URLs of your subsystems
 SUBSYSTEMS = [
-    "http://localhost:5001/api",  # Subsystem 1
-    "http://localhost:5000/api"   # Subsystem 2
+    #"http://localhost:5001/api",  # Subsystem 1
+    "http://localhost/subsystem1/api"   # Subsystem 2
 ]
 
 # ---------------------------
@@ -101,6 +101,9 @@ def search():
     if not query:
         return jsonify({"msg": "Missing query"}), 400
 
+    if not doc_contents:
+        fetch_all_documents()
+
     query_tokens = tokenize(query)
     scores = compute_tfidf_score(query_tokens)
     ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
@@ -123,4 +126,94 @@ def show_inverted_index():
     return jsonify({term: list(doc_ids) for term, doc_ids in inverted_index.items()})
 
 if __name__ == "__main__":
+    from flask import render_template_string
+    @app.route("/")
+    def search_ui():
+       return render_template_string("""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Subsystem 3 Search</title>
+        <link href="/static/css/bootstrap.min.css" rel="stylesheet">
+        <style>
+            body {
+                background-color: #f8f9fa;
+                padding-top: 5%;
+            }
+            .search-box {
+                max-width: 600px;
+                margin: auto;
+            }
+            .result-card {
+                margin-bottom: 1rem;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container text-center">
+            <h1 class="mb-4">Subsystem 3</h1>
+            <div class="search-box bg-white p-4 shadow rounded">
+                <h4 class="mb-3">Search Documents</h4>
+                <div class="input-group mb-3">
+                    <input type="text" id="query" class="form-control form-control-lg" placeholder="Enter search terms" required>
+                    <button class="btn btn-primary btn-lg" onclick="search()">Search</button>
+                </div>
+            </div>
+
+            <div id="results" class="mt-5 text-start" style="max-width: 700px; margin: auto;"></div>
+        </div>
+
+        <script>
+            async function search() {
+                const q = document.getElementById("query").value.trim();
+                const resultsDiv = document.getElementById("results");
+                resultsDiv.innerHTML = "<div class='text-center'>Searching...</div>";
+                if(q.length > 0)
+                {
+                    try {
+                    const response = await fetch(`/api/search?q=` + encodeURIComponent(q));
+                    const data = await response.json();
+
+                    if (!Array.isArray(data)) {
+                        resultsDiv.innerHTML = "<div class='alert alert-danger'>Error: " + (data.message || "Something went wrong.") + "</div>";
+                        return;
+                    }
+
+                    if (data.length === 0) {
+                        resultsDiv.innerHTML = "<div class='alert alert-warning'>No results found.</div>";
+                        return;
+                    }
+
+                    resultsDiv.innerHTML = "";
+                    data.forEach(item => {
+                        const metadata = item.metadata || {};
+                        const downloadLink = metadata.file_path ? `<a href="${metadata.file_path}" download class="btn btn-sm btn-outline-secondary">Download</a>` : "";
+                        resultsDiv.innerHTML += `
+                            <div class="card result-card shadow-sm">
+                                <div class="card-body">
+                                    <h5>${item.title}</h5>
+                                    <p><strong>Author:</strong> ${item.author || "Unknown"}</p>
+                                    <p><strong>Score:</strong> ${item.score}</p>
+                                    ${metadata.filename ? `<p><strong>Filename:</strong> ${metadata.filename}</p>` : ""}
+                                    ${metadata.upload_date ? `<p><strong>Uploaded:</strong> ${metadata.upload_date}</p>` : ""}
+                                    ${downloadLink}
+                                </div>
+                            </div>
+                        `;
+                    });
+                } catch (err) {
+                    resultsDiv.innerHTML = "<div class='alert alert-danger'>Error fetching results.</div>";
+                }
+                }
+                else
+                {
+                    resultsDiv.innerHTML = "<div class='alert alert-warning'>Enter some key word or phrase to search for.</div>";
+                }  
+            }
+        </script>
+    </body>
+    </html>
+    """)
+
     app.run(port=5002, debug=True)
